@@ -1,0 +1,6 @@
+{
+  "name": "hw-bot",
+  "type": "module",
+  "scripts": { "start": "node --env-file=.env bot.js", "test": "node --env-file-if-exists=.env test.js" },
+  "dependencies": { "discord.js": "^14.16.3" }
+}
