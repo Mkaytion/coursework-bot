@@ -87,6 +87,37 @@ not gitignored.
 `node --env-file=.env smoke.js` prints the data without touching Discord — use it to check
 whether the MyCourses token is still valid. `npm test` runs the test suite (`test.js`).
 
+## Running on Linux
+
+Works on any distribution with Node.js 22.9+. Install Node, then get the bot running:
+
+**Debian / Ubuntu** (the distro `nodejs` package is often too old; use NodeSource or nvm):
+
+    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+    sudo apt-get install -y nodejs git
+
+**Arch / Manjaro**:
+
+    sudo pacman -S nodejs npm git
+
+**Fedora / RHEL-likes**:
+
+    sudo dnf install nodejs npm git
+
+**Any distro, no root** ([nvm](https://github.com/nvm-sh/nvm)): `nvm install 22`.
+
+Check with `node -v`, then:
+
+    git clone https://github.com/roptant/coursework-bot /opt/coursework-bot
+    cd /opt/coursework-bot
+    cp .env.example .env && chmod 600 .env    # fill it in, see Setup above
+    npm install
+    node --env-file=.env smoke.js             # sanity check, no Discord
+    npm start                                 # run in the foreground
+
+For a quick background run without systemd, `tmux new -s bot` then `npm start`, and detach
+with Ctrl-b d. For a proper always-on service, use systemd below.
+
 ## Running it unattended on Linux
 
 Create `/etc/systemd/system/mycourses-bot.service` (adjust `User` and paths):
