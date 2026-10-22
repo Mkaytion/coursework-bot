@@ -1,5 +1,11 @@
 # MyCourses -> Discord
 
+A Discord bot for Aalto students that reports which exercises, assignments and quizzes you
+have and haven't submitted on [MyCourses](https://mycourses.aalto.fi) (Moodle) and
+[A+](https://plus.cs.aalto.fi), on demand and on a schedule.
+
+## Commands
+
 `/exercises` reports what you submitted on mycourses.aalto.fi and A+ and what you didn't.
 
 `/exercises week-after:<n>` shifts the window: `0` (default) is this week, `1` next week,
@@ -38,6 +44,15 @@ Scope: **this period's courses only** — the bot asks Moodle which of your enro
 `inprogress` or `future` and ignores the rest. Courses move between those states on their
 own, so this needs no edit next period.
 
+## Requirements
+
+- Node.js 22.9 or newer (the scripts use `--env-file` and `--env-file-if-exists`).
+- A Discord application with a bot user, an Aalto account for MyCourses, and optionally an
+  A+ account.
+- Any OS. The bot is plain Node with no platform-specific code, so it runs on Linux, macOS
+  and Windows. Only `install-task.ps1` and `tray.ps1` are Windows-specific; on Linux use
+  systemd (see "Running it unattended on Linux").
+
 ## Setup
 
 1. **Discord bot**: https://discord.com/developers/applications -> New Application ->
@@ -48,15 +63,62 @@ own, so this needs no edit next period.
    Copy Server ID (`GUILD_ID`), right-click the channel -> Copy Channel ID (`CHANNEL_ID`).
 4. **MOODLE_WS_TOKEN**: see "MyCourses auth" below (one-time, ~3-month token).
 5. **APLUS_TOKEN**: https://plus.cs.aalto.fi/api/v2/get-token/ while logged in.
-6. `npm install && npm start`
+6. `cp .env.example .env`, fill it in, then `npm install && npm start`
+
+### Configuration
+
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `DISCORD_TOKEN` | yes | Bot token |
+| `GUILD_ID` | yes | Server the slash commands are registered in |
+| `CHANNEL_ID` | no | Channel for scheduled posts; unset disables them |
+| `MOODLE_WS_TOKEN` | one of the two | Web-service token (preferred), ~3 months |
+| `MOODLE_SESSION` | one of the two | Cookie fallback, expires in days |
+| `APLUS_TOKEN` | no | A+ API token; never expires |
+| `OWNER_ID` | no | Only for team-owned Discord apps (see `/session`) |
+| `COURSE_FILTER` | no | Narrow to specific courses, e.g. `COE-C2003` |
+| `WEEKLY_POST_OFFSET` | no | `0` preview the week ahead (default), `-1` recap |
+| `DAILY_HOUR` | no | Hour (0-23) of the daily change check, default 18 |
+| `SCAN_WEEKS` | no | Weeks ahead the daily check scans, default 4 |
 
 Put real values in `.env`, never in `.env.example` — nothing reads the latter and it is
 not gitignored.
 
 `node --env-file=.env smoke.js` prints the data without touching Discord — use it to check
-whether the MyCourses token is still valid.
+whether the MyCourses token is still valid. `npm test` runs the test suite (`test.js`).
 
-## Running it unattended
+## Running it unattended on Linux
+
+Create `/etc/systemd/system/mycourses-bot.service` (adjust `User` and paths):
+
+    [Unit]
+    Description=MyCourses -> Discord bot
+    After=network-online.target
+    Wants=network-online.target
+
+    [Service]
+    User=bot
+    WorkingDirectory=/opt/coursework-bot
+    ExecStart=/usr/bin/node --env-file=.env bot.js
+    Restart=always
+    RestartSec=10
+
+    [Install]
+    WantedBy=multi-user.target
+
+Then:
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now mycourses-bot
+    journalctl -u mycourses-bot -f            # follow the log
+
+Systemd restarts the bot on crash and starts it at boot, so unlike the Windows setup it
+keeps running while nobody is logged in and the daily check isn't skipped. Capturing
+`MOODLE_WS_TOKEN` needs a browser (Aalto is SSO): do it on your own machine, run
+`ws-token.mjs` there, and copy the value into the server's `.env`. `/session` and the token
+step both write `.env` with mode 0600; keep it readable only by the service user.
+
+## Running it unattended on Windows
 
     powershell -ExecutionPolicy Bypass -File install-task.ps1
 
@@ -71,7 +133,7 @@ needed. Output goes to `bot.log`.
     Stop-ScheduledTask  -TaskName MyCoursesBot
     Unregister-ScheduledTask -TaskName MyCoursesBot   # remove it entirely
 
-Two things about how it is set up:
+Three things about how it is set up:
 
 - Recovery is the tray's **watchdog**, not `RestartCount`. Task Scheduler's "if the task
   fails, restart" only covers the task failing to *launch* — a process that exits leaves the
@@ -138,3 +200,15 @@ partly-done A+ rounds), **no online submission** (offline, ungraded).
 - A course only appears once it exposes assignments/quizzes to the MyCourses API (or lives
   on A+). One on neither, published nowhere the bot can see, needs a new source in
   `scraper.js`.
+
+## Project layout
+
+| File | Role |
+| --- | --- |
+| `bot.js` | Discord client, slash commands, scheduling, change detection |
+| `moodle.js` | MyCourses client (web-service API, plus cookie fallback) |
+| `aplus.js` | A+ API client |
+| `scraper.js` | Fetches MyCourses and A+ independently and merges the results |
+| `ws-token.mjs` | Decodes a `moodlemobile://token=…` URL into `.env` |
+| `smoke.js`, `test.js` | Data check without Discord; tests |
+| `install-task.ps1`, `tray.ps1` | Windows unattended-run setup and tray watchdog |
